@@ -96,14 +96,7 @@ final class VolumeMacDelegate: NSObject, NSApplicationDelegate {
         mixer.isReleasedWhenClosed = false
         mixer.collectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
         mixer.dismiss = { [weak self] in self?.closeMixer() }
-        let material = MixerSurface()
-        material.focusRingType = .none
-        material.material = .popover
-        material.blendingMode = .behindWindow
-        material.state = .active
-        material.wantsLayer = true
-        material.layer?.cornerRadius = 14
-        material.layer?.masksToBounds = true
+        let surface = MixerSurface(frame: .zero, cornerRadius: 16)
         let content = NSHostingView(rootView: MixerPanel(model: model, measure: { [weak self] height in
             guard let self, height > 0, abs(height - self.contentHeight) > 0.5 else { return }
             self.contentHeight = height
@@ -113,15 +106,15 @@ final class VolumeMacDelegate: NSObject, NSApplicationDelegate {
         }))
         content.sizingOptions = []
         content.translatesAutoresizingMaskIntoConstraints = false
-        material.addSubview(content)
+        surface.addSubview(content)
         NSLayoutConstraint.activate([
-            content.leadingAnchor.constraint(equalTo: material.leadingAnchor),
-            content.trailingAnchor.constraint(equalTo: material.trailingAnchor),
-            content.topAnchor.constraint(equalTo: material.topAnchor),
-            content.bottomAnchor.constraint(equalTo: material.bottomAnchor)
+            content.leadingAnchor.constraint(equalTo: surface.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: surface.trailingAnchor),
+            content.topAnchor.constraint(equalTo: surface.topAnchor),
+            content.bottomAnchor.constraint(equalTo: surface.bottomAnchor)
         ])
-        mixer.contentView = material
-        mixer.initialFirstResponder = material
+        mixer.contentView = surface
+        mixer.initialFirstResponder = surface
         NotificationCenter.default.addObserver(
             self, selector: #selector(repositionVisibleMixer),
             name: NSApplication.didChangeScreenParametersNotification, object: nil
@@ -195,7 +188,21 @@ enum ShortcutMixerLayout {
     }
 }
 
-private final class MixerSurface: NSVisualEffectView {
+private final class MixerSurface: NSView {
+    init(frame: NSRect, cornerRadius: CGFloat) {
+        super.init(frame: frame)
+        appearance = NSAppearance(named: .aqua)
+        focusRingType = .none
+        wantsLayer = true
+        layer?.backgroundColor = NSColor.white.cgColor
+        layer?.cornerRadius = cornerRadius
+        layer?.masksToBounds = true
+        layer?.borderWidth = 1
+        layer?.borderColor = NSColor(white: 0, alpha: 0.08).cgColor
+    }
+
+    required init?(coder: NSCoder) { nil }
+
     override var acceptsFirstResponder: Bool { true }
 }
 
@@ -319,13 +326,7 @@ final class MixerModel: NSObject, ObservableObject {
             panel.hasShadow = true
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
 
-            let surround = NSVisualEffectView(frame: NSRect(x: 0, y: 0, width: side, height: side))
-            surround.material = .popover
-            surround.blendingMode = .behindWindow
-            surround.state = .active
-            surround.wantsLayer = true
-            surround.layer?.cornerRadius = 11
-            surround.layer?.masksToBounds = true
+            let surround = MixerSurface(frame: NSRect(x: 0, y: 0, width: side, height: side), cornerRadius: 11)
 
             let shortcut = FloatingShortcutIcon(frame: surround.bounds)
             shortcut.onPress = { [weak self] view in self?.toggleShortcutControls(view) }
@@ -393,26 +394,19 @@ final class MixerModel: NSObject, ObservableObject {
         controls.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         controls.dismiss = { [weak self] in self?.closeShortcutControls() }
 
-        let material = MixerSurface()
-        material.focusRingType = .none
-        material.material = .popover
-        material.blendingMode = .behindWindow
-        material.state = .active
-        material.wantsLayer = true
-        material.layer?.cornerRadius = 14
-        material.layer?.masksToBounds = true
+        let surface = MixerSurface(frame: .zero, cornerRadius: 16)
 
         let host = NSHostingView(rootView: FloatingMixer(model: self))
         host.translatesAutoresizingMaskIntoConstraints = false
-        material.addSubview(host)
+        surface.addSubview(host)
         NSLayoutConstraint.activate([
-            host.leadingAnchor.constraint(equalTo: material.leadingAnchor),
-            host.trailingAnchor.constraint(equalTo: material.trailingAnchor),
-            host.topAnchor.constraint(equalTo: material.topAnchor),
-            host.bottomAnchor.constraint(equalTo: material.bottomAnchor)
+            host.leadingAnchor.constraint(equalTo: surface.leadingAnchor),
+            host.trailingAnchor.constraint(equalTo: surface.trailingAnchor),
+            host.topAnchor.constraint(equalTo: surface.topAnchor),
+            host.bottomAnchor.constraint(equalTo: surface.bottomAnchor)
         ])
-        controls.contentView = material
-        controls.initialFirstResponder = material
+        controls.contentView = surface
+        controls.initialFirstResponder = surface
         floatingControls = controls
         floatingControlsHost = host
     }
@@ -461,7 +455,7 @@ struct MixerPanel: View {
 
     var body: some View {
         ScrollView {
-            content.padding(15)
+            content.padding(.horizontal, 16).padding(.vertical, 13)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(GeometryReader { geometry in
                     Color.clear.preference(key: MixerHeightKey.self, value: geometry.size.height)
@@ -477,7 +471,7 @@ struct MixerPanel: View {
                 Text("Sound").font(.headline)
                 Spacer()
                 Button(model.floating ? "Hide Floating Shortcut" : "Show Floating Shortcut") { model.toggleFloatingPanel() }
-                    .controlSize(.small)
+                    .buttonStyle(ShortcutButtonStyle())
                     .help(model.floating ? "Hide the floating volume shortcut" : "Show a floating volume shortcut")
             }
             DeviceControls(model: model, direction: .output)
@@ -502,6 +496,19 @@ struct MixerPanel: View {
                 Text("App Volume").font(.subheadline.weight(.semibold))
             }
         }
+    }
+}
+
+private struct ShortcutButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.caption.weight(.medium))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(configuration.isPressed ? Color.black.opacity(0.06) : .white, in: RoundedRectangle(cornerRadius: 7))
+            .overlay {
+                RoundedRectangle(cornerRadius: 7).strokeBorder(Color.black.opacity(0.12))
+            }
     }
 }
 
@@ -617,6 +624,8 @@ private struct FloatingMixer: View {
     }
 }
 
+private let mixerSliderTint = Color(red: 0.48, green: 0.52, blue: 0.57)
+
 private struct DeviceControls: View {
     @ObservedObject var model: MixerModel
     let direction: AudioDirection
@@ -648,6 +657,7 @@ private struct DeviceControls: View {
                 HStack(spacing: 8) {
                     Slider(value: Binding(get: { state.volume ?? volume },
                                           set: { model.changeLevel($0, direction: direction) }), in: 0...1)
+                        .tint(mixerSliderTint)
                         .accessibilityLabel(direction.levelTitle)
                     VolumeValue(volume: volume)
                 }
@@ -679,6 +689,7 @@ private struct AppVolumeRow: View {
                 }
                 HStack(spacing: 6) {
                     Slider(value: Binding(get: { volume }, set: { model.changeApp(app, volume: $0) }), in: 0...1)
+                        .tint(mixerSliderTint)
                         .accessibilityLabel("Volume for \(app.name)")
                     VolumeValue(volume: volume)
                     Button { model.toggleMute(app) } label: {

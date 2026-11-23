@@ -16,8 +16,8 @@ cat > "$app/Contents/Info.plist" <<'PLIST'
     <key>CFBundleExecutable</key><string>VolumeMac</string>
     <key>CFBundleName</key><string>VolumeMac</string>
     <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleVersion</key><string>6</string>
-    <key>CFBundleShortVersionString</key><string>0.6</string>
+    <key>CFBundleVersion</key><string>7</string>
+    <key>CFBundleShortVersionString</key><string>0.7</string>
     <key>LSUIElement</key><true/>
     <key>NSAudioCaptureUsageDescription</key><string>VolumeMac processes audio from the selected app to adjust its volume. Audio stays on this Mac and is not recorded.</string>
     <key>LSMinimumSystemVersion</key><string>14.2</string>

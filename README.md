@@ -1,6 +1,6 @@
 # VolumeMac
 
-A compact macOS menu bar mixer for switching audio devices, adjusting output volume and microphone gain, and controlling apps individually.
+A compact macOS menu bar mixer for switching audio devices, adjusting output volume and microphone gain, and controlling apps individually. Version 0.7 uses a white mixer and floating shortcut with softer slider tracks.
 
 ## Controls
 
