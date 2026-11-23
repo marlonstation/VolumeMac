@@ -3,12 +3,13 @@ import CoreAudio
 import Foundation
 
 struct MixRequest: Equatable {
+    let source: AudioObjectID?
     let output: AudioObjectID
     let processes: [AudioObjectID]
     let gain: Double
 
     func sameRoute(as other: MixRequest) -> Bool {
-        output == other.output && processes == other.processes
+        source == other.source && output == other.output && processes == other.processes
     }
 }
 
@@ -89,10 +90,15 @@ private final class ProcessSession {
     func setGain(_ gain: Double) { vm_buffer_set_gain(buffer, Float(gain)) }
 
     private func start(_ request: MixRequest) throws {
-        guard let uid = Audio.string(request.output, selector: kAudioDevicePropertyDeviceUID) else {
-            throw MixerFailure("Could not identify the current output device.")
+        let description: CATapDescription
+        if let source = request.source {
+            guard let uid = Audio.string(source, selector: kAudioDevicePropertyDeviceUID) else {
+                throw MixerFailure("Could not identify the source audio device.")
+            }
+            description = CATapDescription(processes: request.processes, deviceUID: uid, stream: 0)
+        } else {
+            description = CATapDescription(stereoMixdownOfProcesses: request.processes)
         }
-        let description = CATapDescription(processes: request.processes, deviceUID: uid, stream: 0)
         description.name = "VolumeMac"
         description.isPrivate = true
         description.isMixdown = true
@@ -111,7 +117,7 @@ private final class ProcessSession {
               format.mBitsPerChannel == 32, format.mChannelsPerFrame == 2,
               format.mBytesPerFrame == (format.mFormatFlags & kAudioFormatFlagIsNonInterleaved == 0 ? 8 : 4),
               format.mSampleRate.isFinite, format.mSampleRate > 0 else {
-            throw MixerFailure("The current output does not support the required stereo format.")
+            throw MixerFailure("The audio tap did not provide the required stereo format.")
         }
         guard let tapUID = Audio.string(tap, selector: kAudioTapPropertyUID) else {
             throw MixerFailure("Could not identify the audio tap.")

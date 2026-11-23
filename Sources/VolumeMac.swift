@@ -58,6 +58,10 @@ final class VolumeMacDelegate: NSObject, NSApplicationDelegate {
         configureMixer()
         model.refresh()
         if CommandLine.arguments.contains("--show-floating") { model.showFloatingPanel() }
+        if CommandLine.arguments.contains("--show-app-volume") {
+            model.expanded = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in self?.openMixer() }
+        }
     }
 
     @objc private func statusItemPressed(_ sender: NSStatusBarButton) {
@@ -214,6 +218,7 @@ final class MixerModel: NSObject, ObservableObject {
     @Published private(set) var output = DeviceControlState()
     @Published private(set) var input = DeviceControlState()
     @Published private(set) var apps: [AudioApp] = []
+    @Published private(set) var appOutputs: [String: AudioObjectID] = [:]
     @Published private(set) var levels: [String: Double] = [:]
     @Published private(set) var states: [String: MixState] = [:]
     @Published private(set) var floating = false
@@ -239,6 +244,9 @@ final class MixerModel: NSObject, ObservableObject {
 
     func refresh() {
         output = deviceState(.output)
+        let connected = Set(output.devices.map(\.id))
+        let availableRoutes = appOutputs.filter { connected.contains($0.value) }
+        if availableRoutes != appOutputs { appOutputs = availableRoutes }
         input = deviceState(.input)
         apps = Audio.applications(on: output.selected)
         updateMix()
@@ -269,6 +277,12 @@ final class MixerModel: NSObject, ObservableObject {
             selected: selected,
             volume: selected.flatMap { Audio.volume($0, direction: direction) }
         )
+    }
+
+    func selectAppOutput(_ device: AudioObjectID?, for app: AudioApp) {
+        if let device, !output.devices.contains(where: { $0.id == device }) { return }
+        appOutputs[app.id] = device
+        updateMix()
     }
 
     func changeApp(_ app: AudioApp, volume: Double) {
@@ -417,12 +431,14 @@ final class MixerModel: NSObject, ObservableObject {
             return
         }
         var requests: [String: MixRequest] = [:]
-        if let selected = output.selected {
-            for app in apps {
-                let level = levels[app.id] ?? 1
-                if level < 1, !app.processes.isEmpty {
-                    requests[app.id] = MixRequest(output: selected, processes: app.processes.sorted(), gain: level)
-                }
+        for app in apps {
+            let level = levels[app.id] ?? 1
+            if let destination = appOutputs[app.id], app.playing {
+                requests[app.id] = MixRequest(source: nil, output: destination,
+                                              processes: app.processes.sorted(), gain: level)
+            } else if let selected = output.selected, level < 1, !app.defaultOutputProcesses.isEmpty {
+                requests[app.id] = MixRequest(source: selected, output: selected,
+                                              processes: app.defaultOutputProcesses.sorted(), gain: level)
             }
         }
         guard !requests.isEmpty || !states.isEmpty else { return }
@@ -673,10 +689,37 @@ private struct AppVolumeRow: View {
                     .buttonStyle(.borderless)
                     .accessibilityLabel(volume == 0 ? "Unmute \(app.name)" : "Mute \(app.name)")
                 }
+                outputMenu
             }
         }
         .padding(.vertical, 5)
         .frame(minHeight: 54)
+    }
+
+    private var selectedOutput: AudioObjectID? { model.appOutputs[app.id] }
+
+    private var outputMenu: some View {
+        Menu {
+            Button { model.selectAppOutput(nil, for: app) } label: {
+                if selectedOutput == nil { Label("App Default", systemImage: "checkmark") }
+                else { Text("App Default") }
+            }
+            Divider()
+            ForEach(model.output.devices) { device in
+                Button { model.selectAppOutput(device.id, for: app) } label: {
+                    if selectedOutput == device.id { Label(device.name, systemImage: "checkmark") }
+                    else { Text(device.name) }
+                }
+            }
+        } label: {
+            Label(model.output.devices.first { $0.id == selectedOutput }?.name ?? "App Default",
+                  systemImage: "speaker")
+                .font(.caption2)
+                .lineLimit(1)
+        }
+        .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .accessibilityLabel("Output for \(app.name)")
     }
 
     @ViewBuilder
@@ -687,9 +730,9 @@ private struct AppVolumeRow: View {
                 .help(message).accessibilityHint(message)
         } else if model.states[app.id] == .preparing {
             Text("Connecting…").font(.caption2).foregroundStyle(.secondary)
-        } else if app.playing, app.processes.isEmpty {
+        } else if app.playing, selectedOutput == nil, volume < 1, app.defaultOutputProcesses.isEmpty {
             Text("Other output").font(.caption2).foregroundStyle(.secondary)
-        } else if !app.playing, volume < 1 {
+        } else if !app.playing, selectedOutput != nil || volume < 1 {
             Text("Waiting for audio").font(.caption2).foregroundStyle(.secondary)
         }
     }

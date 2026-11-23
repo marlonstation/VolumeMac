@@ -13,7 +13,8 @@ struct AudioApp: Identifiable {
     let name: String
     let icon: NSImage?
     var processes: [AudioObjectID] = []
-    var playing = false
+    var defaultOutputProcesses: [AudioObjectID] = []
+    var playing: Bool { !processes.isEmpty }
 }
 
 enum AudioDirection {
@@ -150,10 +151,10 @@ enum Audio {
                     apps.keys.filter { bundle == $0 || bundle.hasPrefix($0 + ".") }.max { $0.count < $1.count }
                 }
             guard let key, var app = apps[key] else { continue }
-            app.playing = true
+            app.processes.append(process)
             let devices = objects(process, address(kAudioProcessPropertyDevices, scope: outputScope))
             if let output, devices.isEmpty || devices.contains(output) {
-                app.processes.append(process)
+                app.defaultOutputProcesses.append(process)
             }
             apps[key] = app
         }
