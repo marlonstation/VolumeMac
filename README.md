@@ -11,7 +11,9 @@ A compact macOS menu bar mixer for switching audio devices, adjusting output vol
 
 ## Screenshots
 
-The captures show VolumeMac’s own interface with the surrounding desktop omitted.
+![Full macOS desktop with a blurred background, the VolumeMac menu bar mixer, and the floating speaker shortcut with its controls open](docs/desktop-preview.png)
+
+The desktop preview combines two VolumeMac captures on a blurred screenshot of the full desktop. The close-ups below show each control surface in detail.
 
 <p>
   <img src="docs/menu-bar-mixer.png" width="366" alt="Menu bar mixer with output, input, and an App Volume section, and a Show Floating Shortcut button">
