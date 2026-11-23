@@ -1,0 +1,27 @@
+# macOS and Xcode
+.DS_Store
+._*
+.swiftpm/
+xcuserdata/
+*.xcuserstate
+
+# Local builds, recordings, and packages
+/build/
+/.build/
+/output/
+*.app/
+*.dmg
+*.zip
+*.log
+*.aiff
+*.wav
+
+# Credentials and local configuration
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.p8
+*.mobileprovision
+*.provisionprofile
