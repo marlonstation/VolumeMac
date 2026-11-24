@@ -1,6 +1,6 @@
 # VolumeMac
 
-A compact macOS menu bar mixer for switching audio devices, adjusting output volume and microphone gain, and controlling apps individually. Version 0.7 uses a white mixer and floating shortcut with softer slider tracks.
+A compact macOS menu bar mixer for switching audio devices, adjusting output volume and microphone gain, and controlling apps individually.
 
 ## Controls
 
@@ -8,6 +8,7 @@ A compact macOS menu bar mixer for switching audio devices, adjusting output vol
 - Expand **App Volume** to see open apps with individual sliders and mute controls. This feature is experimental. Choose an output in an app’s row to send supported stereo audio to that device without changing the Mac’s default output. Choose **App Default** to clear the override. Overrides are kept for the current VolumeMac session and cleared if the selected device disconnects.
 - Click **Show Floating Shortcut** to place a small speaker icon on the desktop. Click the speaker to open its controls beside it, or drag it out of the way.
 - Right-click the menu bar icon to show or hide the shortcut or quit. You can also right-click the floating speaker to hide it.
+- Right-click the menu bar icon and choose **Appearance → GTA 6 Mode** for a sunset palette across the mixer and floating controls. Choose **Light** to return to the white mixer. The selection is saved between launches.
 
 ## Screenshots
 

@@ -75,6 +75,14 @@ final class VolumeMacDelegate: NSObject, NSApplicationDelegate {
             open.target = self
             let toggle = menu.addItem(withTitle: shortcut, action: #selector(toggleFloating), keyEquivalent: "")
             toggle.target = self
+            let themeMenu = NSMenu()
+            for theme in MixerTheme.allCases {
+                let item = themeMenu.addItem(withTitle: theme.title, action: #selector(selectTheme(_:)), keyEquivalent: "")
+                item.target = self
+                item.representedObject = theme.rawValue
+                item.state = model.theme == theme ? .on : .off
+            }
+            menu.addItem(withTitle: "Appearance", action: nil, keyEquivalent: "").submenu = themeMenu
             menu.addItem(.separator())
             let quit = menu.addItem(withTitle: "Quit VolumeMac", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
             quit.target = NSApp
@@ -96,7 +104,7 @@ final class VolumeMacDelegate: NSObject, NSApplicationDelegate {
         mixer.isReleasedWhenClosed = false
         mixer.collectionBehavior = [.fullScreenAuxiliary, .ignoresCycle]
         mixer.dismiss = { [weak self] in self?.closeMixer() }
-        let surface = MixerSurface(frame: .zero, cornerRadius: 16)
+        let surface = MixerSurface(frame: .zero, cornerRadius: 16, model: model)
         let content = NSHostingView(rootView: MixerPanel(model: model, measure: { [weak self] height in
             guard let self, height > 0, abs(height - self.contentHeight) > 0.5 else { return }
             self.contentHeight = height
@@ -159,6 +167,11 @@ final class VolumeMacDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleFloating() { model.toggleFloatingPanel() }
+
+    @objc private func selectTheme(_ sender: NSMenuItem) {
+        guard let id = sender.representedObject as? String, let theme = MixerTheme(rawValue: id) else { return }
+        model.selectTheme(theme)
+    }
 }
 
 enum StatusMixerLayout {
@@ -188,17 +201,56 @@ enum ShortcutMixerLayout {
     }
 }
 
+enum MixerTheme: String, CaseIterable {
+    case light, gta6
+
+    var title: String { self == .gta6 ? "GTA 6 Mode" : "Light" }
+    var peach: NSColor { NSColor(srgbRed: 0.99, green: 0.79, blue: 0.61, alpha: 1) }
+    var rose: NSColor { NSColor(srgbRed: 0.95, green: 0.62, blue: 0.71, alpha: 1) }
+    var controls: Color { Color(nsColor: self == .gta6 ? peach : .labelColor) }
+    var slider: Color {
+        self == .gta6 ? Color(nsColor: rose) : Color(red: 0.48, green: 0.52, blue: 0.57)
+    }
+}
+
 private final class MixerSurface: NSView {
-    init(frame: NSRect, cornerRadius: CGFloat) {
+    private let sunset = CAGradientLayer()
+    private var themeObservation: AnyCancellable?
+
+    init(frame: NSRect, cornerRadius: CGFloat, model: MixerModel) {
         super.init(frame: frame)
-        appearance = NSAppearance(named: .aqua)
         focusRingType = .none
         wantsLayer = true
         layer?.backgroundColor = NSColor.white.cgColor
         layer?.cornerRadius = cornerRadius
         layer?.masksToBounds = true
         layer?.borderWidth = 1
-        layer?.borderColor = NSColor(white: 0, alpha: 0.08).cgColor
+        sunset.colors = [
+            NSColor(srgbRed: 0.33, green: 0.18, blue: 0.31, alpha: 1).cgColor,
+            NSColor(srgbRed: 0.12, green: 0.11, blue: 0.21, alpha: 1).cgColor
+        ]
+        sunset.startPoint = CGPoint(x: 1, y: 1)
+        sunset.endPoint = CGPoint(x: 0, y: 0)
+        layer?.insertSublayer(sunset, at: 0)
+        themeObservation = model.$theme.sink { [weak self] in self?.applyTheme($0) }
+    }
+
+    override func layout() {
+        super.layout()
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        sunset.frame = bounds
+        CATransaction.commit()
+    }
+
+    private func applyTheme(_ theme: MixerTheme) {
+        let isGTA6 = theme == .gta6
+        appearance = NSAppearance(named: isGTA6 ? .darkAqua : .aqua)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        sunset.isHidden = !isGTA6
+        layer?.borderColor = (isGTA6 ? theme.rose.withAlphaComponent(0.58) : NSColor(white: 0, alpha: 0.08)).cgColor
+        CATransaction.commit()
     }
 
     required init?(coder: NSCoder) { nil }
@@ -230,6 +282,7 @@ final class MixerModel: NSObject, ObservableObject {
     @Published private(set) var states: [String: MixState] = [:]
     @Published private(set) var floating = false
     @Published private(set) var deviceError: String?
+    @Published private(set) var theme = MixerTheme(rawValue: UserDefaults.standard.string(forKey: "mixerTheme") ?? "") ?? .light
     @Published var expanded = false
 
     private let engine = AppMixer()
@@ -241,6 +294,11 @@ final class MixerModel: NSObject, ObservableObject {
     private var floatingClickMonitor: Any?
     private var updateInFlight = false
     private var pendingUpdate = false
+
+    func selectTheme(_ theme: MixerTheme) {
+        self.theme = theme
+        UserDefaults.standard.set(theme.rawValue, forKey: "mixerTheme")
+    }
 
     private override init() {
         super.init()
@@ -326,7 +384,7 @@ final class MixerModel: NSObject, ObservableObject {
             panel.hasShadow = true
             panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
 
-            let surround = MixerSurface(frame: NSRect(x: 0, y: 0, width: side, height: side), cornerRadius: 11)
+            let surround = MixerSurface(frame: NSRect(x: 0, y: 0, width: side, height: side), cornerRadius: 11, model: self)
 
             let shortcut = FloatingShortcutIcon(frame: surround.bounds)
             shortcut.onPress = { [weak self] view in self?.toggleShortcutControls(view) }
@@ -394,7 +452,7 @@ final class MixerModel: NSObject, ObservableObject {
         controls.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
         controls.dismiss = { [weak self] in self?.closeShortcutControls() }
 
-        let surface = MixerSurface(frame: .zero, cornerRadius: 16)
+        let surface = MixerSurface(frame: .zero, cornerRadius: 16, model: self)
 
         let host = NSHostingView(rootView: FloatingMixer(model: self))
         host.translatesAutoresizingMaskIntoConstraints = false
@@ -461,7 +519,7 @@ struct MixerPanel: View {
                     Color.clear.preference(key: MixerHeightKey.self, value: geometry.size.height)
                 })
         }
-        .tint(Color(nsColor: .labelColor))
+        .tint(model.theme.controls)
         .onPreferenceChange(MixerHeightKey.self, perform: measure)
     }
 
@@ -469,9 +527,10 @@ struct MixerPanel: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Text("Sound").font(.headline)
+                    .foregroundStyle(model.theme.controls)
                 Spacer()
                 Button(model.floating ? "Hide Floating Shortcut" : "Show Floating Shortcut") { model.toggleFloatingPanel() }
-                    .buttonStyle(ShortcutButtonStyle())
+                    .buttonStyle(ShortcutButtonStyle(theme: model.theme))
                     .help(model.floating ? "Hide the floating volume shortcut" : "Show a floating volume shortcut")
             }
             DeviceControls(model: model, direction: .output)
@@ -500,14 +559,21 @@ struct MixerPanel: View {
 }
 
 private struct ShortcutButtonStyle: ButtonStyle {
+    let theme: MixerTheme
+
     func makeBody(configuration: Configuration) -> some View {
+        let foreground = theme == .gta6 ? theme.controls : .primary
         configuration.label
             .font(.caption.weight(.medium))
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .background(configuration.isPressed ? Color.black.opacity(0.06) : .white, in: RoundedRectangle(cornerRadius: 7))
+            .foregroundStyle(foreground)
+            .background(theme == .gta6 ? Color.white.opacity(configuration.isPressed ? 0.16 : 0.07)
+                        : configuration.isPressed ? Color.black.opacity(0.06) : .white,
+                        in: RoundedRectangle(cornerRadius: 7))
             .overlay {
-                RoundedRectangle(cornerRadius: 7).strokeBorder(Color.black.opacity(0.12))
+                RoundedRectangle(cornerRadius: 7)
+                    .strokeBorder(theme == .gta6 ? Color(nsColor: theme.rose).opacity(0.42) : Color.black.opacity(0.12))
             }
     }
 }
@@ -620,11 +686,9 @@ private struct FloatingMixer: View {
         }
         .padding(12)
         .frame(width: 254)
-        .tint(Color(nsColor: .labelColor))
+        .tint(model.theme.controls)
     }
 }
-
-private let mixerSliderTint = Color(red: 0.48, green: 0.52, blue: 0.57)
 
 private struct DeviceControls: View {
     @ObservedObject var model: MixerModel
@@ -657,7 +721,7 @@ private struct DeviceControls: View {
                 HStack(spacing: 8) {
                     Slider(value: Binding(get: { state.volume ?? volume },
                                           set: { model.changeLevel($0, direction: direction) }), in: 0...1)
-                        .tint(mixerSliderTint)
+                        .tint(model.theme.slider)
                         .accessibilityLabel(direction.levelTitle)
                     VolumeValue(volume: volume)
                 }
@@ -689,7 +753,7 @@ private struct AppVolumeRow: View {
                 }
                 HStack(spacing: 6) {
                     Slider(value: Binding(get: { volume }, set: { model.changeApp(app, volume: $0) }), in: 0...1)
-                        .tint(mixerSliderTint)
+                        .tint(model.theme.slider)
                         .accessibilityLabel("Volume for \(app.name)")
                     VolumeValue(volume: volume)
                     Button { model.toggleMute(app) } label: {
